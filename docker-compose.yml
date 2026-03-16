@@ -1,0 +1,67 @@
+version: '3.8'
+
+services:
+
+  eureka-server:
+    build: ./service-registry
+    container_name: eureka-server
+    ports:
+      - "8761:8761"
+    networks:
+      - event-network
+
+  postgres-db:
+    image: postgres
+    container_name: postgres-db
+    environment:
+      POSTGRES_DB: event_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    networks:
+      - event-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  user-service:
+    build: ./user-service
+    container_name: user-service-container
+    ports:
+      - "8081:8081"
+    depends_on:
+      postgres-db:
+        condition: service_healthy
+      eureka-server:
+        condition: service_started
+
+    networks:
+      - event-network
+
+  event-service:
+    build: ./event-service
+    container_name: event-service-container
+    ports:
+      - 8082:8082
+    depends_on:
+      postgres-db:
+          condition: service_healthy
+      eureka-server:
+        condition: service_started
+    networks:
+      - event-network
+
+  api-gateway:
+    build: ./api-gateway
+    container_name: api-gateway-container
+    ports:
+      - "8080:8080"
+    networks:
+      - event-network
+
+networks:
+  event-network:
+    driver: bridge
