@@ -2,12 +2,17 @@ package com.event.eventservice.service.impl;
 
 import com.event.eventservice.client.UserClient;
 import com.event.eventservice.dto.EventDto;
+import com.event.eventservice.dto.UserDto;
 import com.event.eventservice.entity.Event;
 import com.event.eventservice.exception.OrganizerNotFoundException;
+import com.event.eventservice.exception.UserServiceUnavailableException;
 import com.event.eventservice.repository.EventRepository;
 import com.event.eventservice.service.EventService;
+import feign.FeignException;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -35,14 +40,10 @@ public class EventServiceImpl implements EventService {
                 ).toList();
     }
 
-    @CircuitBreaker(name = "userService", fallbackMethod = "userServiceFallback")
     @Override
     public EventDto createEvent(EventDto eventDto) {
-        try {
-            userClient.getUserById(eventDto.getOrganizerId());
-        }catch (Exception e){
-            throw new OrganizerNotFoundException("Organizer not found");
-        }
+
+        validateOrganizerWithCB(eventDto.getOrganizerId());
 
         Event event = Event.builder()
                 .title(eventDto.getTitle())
@@ -105,7 +106,23 @@ public class EventServiceImpl implements EventService {
     }
 
 
-    public EventDto userServiceFallback(EventDto eventDto, Throwable throwable) {
-        throw new RuntimeException("User Service unavailable, please try again later");
+    @CircuitBreaker(name = "userService" , fallbackMethod = "userServiceFallback")
+    public void validateOrganizerWithCB(Long organizerId) {
+        ResponseEntity<UserDto> response = userClient.getUserById(organizerId);
+        if (response.getStatusCode() == HttpStatus.NOT_FOUND) {
+            throw new OrganizerNotFoundException("Organizer with id " + organizerId + " not found");
+        }
+    }
+
+    public void validateOrganizer(Long organizerId) {
+        try {
+            userClient.getUserById(organizerId);
+        } catch (FeignException.NotFound e) {
+            throw new OrganizerNotFoundException("Organizer with id " + organizerId + " not found");
+        }
+    }
+
+    public void userServiceFallback(Long organizerId, Throwable throwable) {
+        throw new UserServiceUnavailableException("User Service unavailable, please try again later");
     }
 }

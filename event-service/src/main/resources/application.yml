@@ -30,5 +30,6 @@ resilience4j:
       userService:
         sliding-window-size: 5
         failure-rate-threshold: 50
-        wait-duration-in-open-state:
-          seconds: 10
+        wait-duration-in-open-state: 10
+#        ignore-exceptions:
+#          - com.event.eventservice.exception.OrganizerNotFoundException
